@@ -1,6 +1,6 @@
+pub mod contract;
 pub mod core;
 pub mod validate;
-pub mod contract;
 
 // 库的版本信息
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

@@ -1,14 +1,10 @@
-// src/core/entity.rs
 
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 use crate::FanResult;
 
 /// 法律主体的类型
-/// 目前我们主要关注自然人和法人这两种最基本的类型
-// src/core/entity.rs
-
-/// 法律主体的类型
+/// 目前我们主要关注自然人和法人这两种最基本的类型，但是还是设置一个非法人组织的枚举
 #[derive(Debug, Clone, PartialEq)]
 pub enum EntityType {
     NaturalPerson,         // 自然人
