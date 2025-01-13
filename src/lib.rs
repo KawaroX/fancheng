@@ -9,6 +9,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[derive(Debug)]
 pub enum FanError {
     ValidationError(String),
+    LockError(String),
     // 后续可以添加更多错误类型
 }
 

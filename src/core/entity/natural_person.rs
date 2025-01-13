@@ -4,6 +4,7 @@ use crate::FanResult;
 use crate::core::entity::base::{BaseEntity, CapacityStatus, Entity, EntityType, NaturalCapacity};
 use chrono::prelude::*;
 use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
 /// 精神状态
@@ -97,24 +98,70 @@ impl NaturalPerson {
         Ok(())
     }
 
-    /// 设置监护人
+    /// 设置监护人，并修改作为监护人的 NaturalPerson 实例
     pub fn set_guardian(
-        &mut self,
-        guardian: &NaturalPerson,
+        ward: &Arc<Mutex<Self>>,
+        guardian: &Arc<Mutex<Self>>,
         scope: GuardianshipScope,
     ) -> FanResult<()> {
-        if !guardian.can_be_guardian() {
-            return Err(FanError::ValidationError("Invalid guardian".to_string()));
-        }
+        // 尝试获取监护人信息，仅持有读取所需的短时间锁
+        let guardian_id = {
+            let guardian = guardian.try_lock().map_err(|e| match e {
+                TryLockError::Poisoned(_) => FanError::LockError("Guardian lock poisoned".into()),
+                TryLockError::WouldBlock => {
+                    FanError::LockError("Guardian lock currently in use".into())
+                }
+            })?;
+            if !guardian.can_be_guardian() {
+                return Err(FanError::ValidationError("Invalid guardian".to_string()));
+            }
+            guardian.base.id
+        };
 
-        self.guardian = Some(Guardianship {
-            guardian: guardian.base.id,
-            ward: self.base.id,
+        // 对 ward 和 guardian 按固定顺序加锁，避免死锁
+        let (mut ward, mut guardian) = if Arc::as_ptr(ward) < Arc::as_ptr(guardian) {
+            let ward = ward.try_lock().map_err(|e| match e {
+                TryLockError::Poisoned(_) => FanError::LockError("Ward lock poisoned".into()),
+                TryLockError::WouldBlock => {
+                    FanError::LockError("Ward lock currently in use".into())
+                }
+            })?;
+            let guardian = guardian.try_lock().map_err(|e| match e {
+                TryLockError::Poisoned(_) => FanError::LockError("Guardian lock poisoned".into()),
+                TryLockError::WouldBlock => {
+                    FanError::LockError("Guardian lock currently in use".into())
+                }
+            })?;
+            (ward, guardian)
+        } else {
+            let guardian = guardian.try_lock().map_err(|e| match e {
+                TryLockError::Poisoned(_) => FanError::LockError("Guardian lock poisoned".into()),
+                TryLockError::WouldBlock => {
+                    FanError::LockError("Guardian lock currently in use".into())
+                }
+            })?;
+            let ward = ward.try_lock().map_err(|e| match e {
+                TryLockError::Poisoned(_) => FanError::LockError("Ward lock poisoned".into()),
+                TryLockError::WouldBlock => {
+                    FanError::LockError("Ward lock currently in use".into())
+                }
+            })?;
+            (ward, guardian)
+        };
+
+        // 更新 ward 和 guardian 的状态
+        ward.guardian = Some(Guardianship {
+            guardian: guardian_id,
+            ward: ward.base.id,
             scope,
             created_at: Utc::now(),
             valid_until: None,
         });
-        self.base.updated_at = Utc::now();
+        ward.base.updated_at = Utc::now();
+
+        guardian.is_guardian = true;
+        guardian.base.updated_at = Utc::now();
+
         Ok(())
     }
 
@@ -150,6 +197,8 @@ impl Entity for NaturalPerson {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Mutex};
+    use std::thread;
 
     #[test]
     fn test_natural_person_capacity() {
@@ -167,11 +216,17 @@ mod tests {
     #[test]
     fn test_guardianship() {
         let guardian_birth_date = Utc::now() - chrono::Duration::days(365 * 30); // 30岁
-        let guardian = NaturalPerson::new(guardian_birth_date, MentalStatus::Normal);
-        assert!(guardian.can_be_guardian());
+        let guardian = Arc::new(Mutex::new(NaturalPerson::new(
+            guardian_birth_date,
+            MentalStatus::Normal,
+        )));
+        assert!(guardian.lock().unwrap().can_be_guardian());
 
         let ward_birth_date = Utc::now() - chrono::Duration::days(365 * 10); // 10岁
-        let mut ward = NaturalPerson::new(ward_birth_date, MentalStatus::Normal);
+        let ward = Arc::new(Mutex::new(NaturalPerson::new(
+            ward_birth_date,
+            MentalStatus::Normal,
+        )));
 
         let mut scope = GuardianshipScope {
             permitted_actions: HashSet::new(),
@@ -180,6 +235,128 @@ mod tests {
             .permitted_actions
             .insert("daily_necessities".to_string());
 
-        assert!(ward.set_guardian(&guardian, scope).is_ok());
+        // 使用线程安全的 set_guardian
+        let result = NaturalPerson::set_guardian(&ward, &guardian, scope);
+
+        assert!(
+            result.is_ok(),
+            "Setting guardian should succeed, but got: {:?}",
+            result
+        );
+
+        // 验证被监护人状态
+        let ward_guardian = ward.lock().unwrap().guardian.clone();
+        assert!(ward_guardian.is_some(), "Ward should have a guardian");
+        assert_eq!(
+            ward_guardian.unwrap().guardian,
+            guardian.lock().unwrap().id(),
+            "Guardian ID should match"
+        );
+
+        // 验证监护人状态
+        assert!(
+            guardian.lock().unwrap().is_guardian,
+            "Guardian should be marked as guardian"
+        );
+    }
+
+    #[test]
+    fn test_set_guardian_success() {
+        // 初始化监护人和被监护人
+        let guardian = Arc::new(Mutex::new(NaturalPerson::new(
+            Utc::now() - chrono::Duration::days(365 * 30), // 30岁
+            MentalStatus::Normal,
+        )));
+        let ward = Arc::new(Mutex::new(NaturalPerson::new(
+            Utc::now() - chrono::Duration::days(365 * 10), // 10岁
+            MentalStatus::Normal,
+        )));
+
+        // 设置监护范围
+        let mut scope = GuardianshipScope {
+            permitted_actions: HashSet::new(),
+        };
+        scope
+            .permitted_actions
+            .insert("daily_necessities".to_string());
+
+        // 调用 set_guardian
+        let result = NaturalPerson::set_guardian(&ward, &guardian, scope);
+        assert!(result.is_ok(), "Setting guardian should succeed");
+
+        // 检查被监护人信息是否正确更新
+        let ward_guardian = ward.lock().unwrap().guardian.clone();
+        assert!(ward_guardian.is_some(), "Ward should have a guardian");
+        assert_eq!(
+            ward_guardian.unwrap().guardian,
+            guardian.lock().unwrap().id(),
+            "Guardian ID should match"
+        );
+
+        // 检查监护人状态是否正确更新
+        assert!(
+            guardian.lock().unwrap().is_guardian,
+            "Guardian should be marked as guardian"
+        );
+    }
+
+    #[test]
+    fn test_set_guardian_invalid_guardian() {
+        // 初始化无效的监护人（未成年人）
+        let guardian = Arc::new(Mutex::new(NaturalPerson::new(
+            Utc::now() - chrono::Duration::days(365 * 15), // 15岁
+            MentalStatus::Normal,
+        )));
+        let ward = Arc::new(Mutex::new(NaturalPerson::new(
+            Utc::now() - chrono::Duration::days(365 * 10), // 10岁
+            MentalStatus::Normal,
+        )));
+
+        // 设置监护范围
+        let scope = GuardianshipScope {
+            permitted_actions: HashSet::new(),
+        };
+
+        // 调用 set_guardian
+        let result = NaturalPerson::set_guardian(&ward, &guardian, scope);
+        assert!(
+            matches!(result, Err(FanError::ValidationError(_))),
+            "Setting guardian should fail for invalid guardian"
+        );
+    }
+
+    #[test]
+    fn test_set_guardian_lock_error() {
+        // 初始化监护人和被监护人
+        let guardian = Arc::new(Mutex::new(NaturalPerson::new(
+            Utc::now() - chrono::Duration::days(365 * 30), // 30岁
+            MentalStatus::Normal,
+        )));
+        let ward = Arc::new(Mutex::new(NaturalPerson::new(
+            Utc::now() - chrono::Duration::days(365 * 10), // 10岁
+            MentalStatus::Normal,
+        )));
+
+        // 模拟锁冲突
+        let guardian_clone = Arc::clone(&guardian);
+        let ward_clone = Arc::clone(&ward);
+
+        let _lock_guardian = guardian.lock().unwrap(); // 模拟另一个线程锁住监护人
+        let _lock_ward = ward.lock().unwrap(); // 模拟另一个线程锁住被监护人
+
+        // 在新线程中调用 set_guardian，模拟锁冲突
+        let handle = thread::spawn(move || {
+            let scope = GuardianshipScope {
+                permitted_actions: HashSet::new(),
+            };
+
+            NaturalPerson::set_guardian(&ward_clone, &guardian_clone, scope)
+        });
+
+        let result = handle.join().unwrap();
+        assert!(
+            matches!(result, Err(FanError::LockError(_))),
+            "Setting guardian should fail due to lock error"
+        );
     }
 }
