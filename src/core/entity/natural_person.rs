@@ -43,21 +43,44 @@ pub struct NaturalPerson {
 }
 
 impl NaturalPerson {
+    /// 创建一个新的自然人实体
+    ///
+    /// # 参数 Arguments
+    ///
+    /// * `birth_date` - Utc时间格式的出生日期，用于确定自然人的年龄
+    /// * `mental_status` - 心智状态，用于评估自然人的行为能力
+    ///
+    /// # 返回 Returns
+    ///
+    /// 返回一个新的自然人实体，包含基本属性和根据出生日期与心智状态评估的行为能力
     pub fn new(birth_date: DateTime<Utc>, mental_status: MentalStatus) -> Self {
+        // 获取当前UTC时间，用于设置创建和更新时间戳
         let now = Utc::now();
+
+        // 根据出生日期和心智状态评估行为能力
         let capacity = Self::evaluate_capacity(&birth_date, &mental_status);
 
+        // 构建并返回一个新的自然人实体
         Self {
             base: BaseEntity {
+                // 生成唯一的实体ID
                 id: Uuid::new_v4(),
+                // 设置实体类型为自然人
                 entity_type: EntityType::NaturalPerson,
+                // 设置行为能力状态
                 capacity_status: CapacityStatus::NaturalPerson(capacity),
+                // 设置创建时间戳
                 created_at: now,
+                // 设置更新时间戳
                 updated_at: now,
             },
+            // 设置出生日期
             birth_date,
+            // 设置心智状态
             mental_status,
+            // 初始化法定监护人为空
             guardian: None,
+            // 初始化是否为监护人的状态为否
             is_guardian: false,
         }
     }
@@ -226,21 +249,45 @@ pub struct SyncNaturalPerson {
 
 /// 给 SyncNaturalPerson（线程安全的NP） 实现 Entity trait
 impl SyncNaturalPerson {
+    /// 创建一个新的自然人实体
+    ///
+    /// # 参数 Arguments
+    ///
+    /// * `birth_date` - 自然人的出生日期，用于计算其民事行为能力
+    /// * `mental_status` - 自然人的精神状态，用于评估其民事行为能力
+    ///
+    /// # 返回 Returns
+    ///
+    /// 返回一个新创建的自然人实体实例
     pub fn new(birth_date: DateTime<Utc>, mental_status: MentalStatus) -> Self {
+        // 获取当前时间，用于记录实体的创建和更新时间
         let now = Utc::now();
+
+        // 根据出生日期和精神状态评估自然人的民事行为能力
         let capacity = NaturalPerson::evaluate_capacity(&birth_date, &mental_status);
 
+        // 构建并返回一个新的自然人实体
         Self {
+            // 使用Arc和RwLock来管理实体的基础信息，确保线程安全和可变性
             base: Arc::new(RwLock::new(BaseEntity {
+                // 为每个自然人实体分配一个唯一的UUID作为标识
                 id: Uuid::new_v4(),
+                // 设置实体类型为自然人
                 entity_type: EntityType::NaturalPerson,
+                // 根据自然人的民事行为能力设置其民事行为能力状态
                 capacity_status: CapacityStatus::NaturalPerson(capacity),
+                // 记录实体的创建时间
                 created_at: now,
+                // 记录实体的最后更新时间
                 updated_at: now,
             })),
+            // 自然人的出生日期
             birth_date,
+            // 自然人的精神状态，使用Arc和RwLock确保线程安全和可变性
             mental_status: Arc::new(RwLock::new(mental_status)),
+            // 自然人的监护人信息，初始设置为None，使用Arc和RwLock确保线程安全和可变性
             guardian: Arc::new(RwLock::new(None)),
+            // 自然人是否是监护人的状态，初始设置为false，使用Arc和RwLock确保线程安全和可变性
             is_guardian: Arc::new(RwLock::new(false)),
         }
     }

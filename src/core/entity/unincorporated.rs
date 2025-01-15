@@ -5,7 +5,7 @@ use crate::core::entity::base::{
     AuthorityScope, AuthorityStatus, BaseEntity, CapacityStatus, Entity, EntityType,
 };
 use chrono::{DateTime, Utc};
-use parking_lot::{Mutex, RwLock};
+use parking_lot::RwLock;
 use std::collections::HashSet;
 use std::sync::Arc;
 use uuid::Uuid;
