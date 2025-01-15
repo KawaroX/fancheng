@@ -5,7 +5,9 @@ use crate::core::entity::base::{
     AuthorityScope, AuthorityStatus, BaseEntity, CapacityStatus, Entity, EntityType,
 };
 use chrono::{DateTime, Utc};
+use parking_lot::{Mutex, RwLock};
 use std::collections::HashSet;
+use std::sync::Arc;
 use uuid::Uuid;
 
 /// 非法人组织类型
@@ -59,6 +61,163 @@ pub struct UnincorporatedOrg {
     members: Vec<Partner>,           // 成员列表
     registered_address: String,
     establishment_date: DateTime<Utc>,
+}
+
+/// 线程安全版本非法人组织
+#[derive(Debug)]
+pub struct SyncUnincorporatedOrg {
+    base: Arc<RwLock<BaseEntity>>,
+    org_type: UnincorporatedOrgType, // 不可变
+    executive_partner: Arc<RwLock<Option<Uuid>>>,
+    members: Arc<RwLock<Vec<Partner>>>,
+    registered_address: Arc<RwLock<String>>,
+    establishment_date: DateTime<Utc>, // 不可变
+}
+
+impl SyncUnincorporatedOrg {
+    pub fn new(
+        org_type: UnincorporatedOrgType,
+        registered_address: String,
+        establishment_date: DateTime<Utc>,
+    ) -> Self {
+        let now = Utc::now();
+        let authority_scope = AuthorityScope {
+            status: AuthorityStatus::Full,
+            permitted_authorities: HashSet::new(),
+            restrictions: None,
+        };
+
+        Self {
+            base: Arc::new(RwLock::new(BaseEntity {
+                id: Uuid::new_v4(),
+                entity_type: EntityType::UnincorporatedOrg,
+                capacity_status: CapacityStatus::UnincorporatedOrg(authority_scope),
+                created_at: now,
+                updated_at: now,
+            })),
+            org_type,
+            executive_partner: Arc::new(RwLock::new(None)),
+            members: Arc::new(RwLock::new(Vec::new())),
+            registered_address: Arc::new(RwLock::new(registered_address)),
+            establishment_date,
+        }
+    }
+
+    pub fn add_partner(&self, partner: Partner) -> FanResult<()> {
+        match self.org_type {
+            UnincorporatedOrgType::Partnership(_) => {
+                self.members.write().push(partner);
+                self.base.write().updated_at = Utc::now();
+                Ok(())
+            }
+            _ => Err(FanError::ValidationError(
+                "Only partnership can add partners".to_string(),
+            )),
+        }
+    }
+
+    pub fn set_executive_partner(&self, partner_id: Uuid) -> FanResult<()> {
+        match self.org_type {
+            UnincorporatedOrgType::Partnership(_) => {
+                let members = self.members.read();
+                if members.iter().any(|p| p.id == partner_id) {
+                    drop(members); // 释放读锁
+                    *self.executive_partner.write() = Some(partner_id);
+                    self.base.write().updated_at = Utc::now();
+                    Ok(())
+                } else {
+                    Err(FanError::ValidationError("Partner not found".to_string()))
+                }
+            }
+            _ => Err(FanError::ValidationError(
+                "Only partnership can set executive partner".to_string(),
+            )),
+        }
+    }
+
+    pub fn add_authority(&self, authority: String) -> FanResult<()> {
+        let mut base = self.base.write();
+        if let CapacityStatus::UnincorporatedOrg(scope) = &mut base.capacity_status {
+            scope.permitted_authorities.insert(authority);
+            base.updated_at = Utc::now();
+            Ok(())
+        } else {
+            Err(FanError::ValidationError(
+                "Invalid capacity status type".to_string(),
+            ))
+        }
+    }
+
+    pub fn update_authority_status(&self, new_status: AuthorityStatus) -> FanResult<()> {
+        let mut base = self.base.write();
+        if let CapacityStatus::UnincorporatedOrg(scope) = &mut base.capacity_status {
+            scope.status = new_status;
+            base.updated_at = Utc::now();
+            Ok(())
+        } else {
+            Err(FanError::ValidationError(
+                "Invalid capacity status type".to_string(),
+            ))
+        }
+    }
+
+    pub fn can_perform_activity(&self, activity: &str) -> bool {
+        let base = self.base.read();
+        if let CapacityStatus::UnincorporatedOrg(scope) = &base.capacity_status {
+            match scope.status {
+                AuthorityStatus::Full => {
+                    scope.permitted_authorities.contains(activity)
+                        && !scope
+                            .restrictions
+                            .as_ref()
+                            .map_or(false, |r| r.contains(&activity.to_string()))
+                }
+                AuthorityStatus::Limited => {
+                    scope.permitted_authorities.contains(activity)
+                        && !scope
+                            .restrictions
+                            .as_ref()
+                            .map_or(false, |r| r.contains(&activity.to_string()))
+                }
+                AuthorityStatus::Suspended => false,
+            }
+        } else {
+            false
+        }
+    }
+
+    pub fn from_unincorporated_org(org: UnincorporatedOrg) -> Self {
+        Self {
+            base: Arc::new(RwLock::new(org.base)),
+            org_type: org.org_type,
+            executive_partner: Arc::new(RwLock::new(org.executive_partner)),
+            members: Arc::new(RwLock::new(org.members)),
+            registered_address: Arc::new(RwLock::new(org.registered_address)),
+            establishment_date: org.establishment_date,
+        }
+    }
+}
+
+impl Entity for SyncUnincorporatedOrg {
+    fn id(&self) -> Uuid {
+        self.base.read().id
+    }
+
+    fn entity_type(&self) -> EntityType {
+        self.base.read().entity_type.clone()
+    }
+
+    fn capacity_status(&self) -> CapacityStatus {
+        self.base.read().capacity_status.clone()
+    }
+
+    fn created_at(&self) -> DateTime<Utc> {
+        self.base.read().created_at
+    }
+
+    fn updated_at(&self) -> DateTime<Utc> {
+        self.base.read().updated_at
+    }
 }
 
 impl UnincorporatedOrg {

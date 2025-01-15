@@ -8,4 +8,5 @@ license = "MIT"
 
 [dependencies]
 chrono = "0.4"
-uuid = { version = "1.11.0", features = ["v4", "fast-rng", "macro-diagnostics"] }
+uuid = { version = "1.4", features = ["v4", "fast-rng", "macro-diagnostics"] }
+parking_lot = "0.12"

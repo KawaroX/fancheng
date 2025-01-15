@@ -3,8 +3,9 @@ use crate::FanResult;
 
 use crate::core::entity::base::{BaseEntity, CapacityStatus, Entity, EntityType, NaturalCapacity};
 use chrono::prelude::*;
+use parking_lot::{Mutex, RwLock};
 use std::collections::HashSet;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::Arc;
 use uuid::Uuid;
 
 /// 精神状态
@@ -218,9 +219,9 @@ impl Entity for NaturalPerson {
 pub struct SyncNaturalPerson {
     base: Arc<RwLock<BaseEntity>>,
     birth_date: DateTime<Utc>, // 不需要锁，因为不可变
-    mental_status: Arc<Mutex<MentalStatus>>,
+    mental_status: Arc<RwLock<MentalStatus>>,
     guardian: Arc<RwLock<Option<Guardianship>>>,
-    is_guardian: Arc<Mutex<bool>>,
+    is_guardian: Arc<RwLock<bool>>,
 }
 
 /// 给 SyncNaturalPerson（线程安全的NP） 实现 Entity trait
@@ -238,9 +239,9 @@ impl SyncNaturalPerson {
                 updated_at: now,
             })),
             birth_date,
-            mental_status: Arc::new(Mutex::new(mental_status)),
+            mental_status: Arc::new(RwLock::new(mental_status)),
             guardian: Arc::new(RwLock::new(None)),
-            is_guardian: Arc::new(Mutex::new(false)),
+            is_guardian: Arc::new(RwLock::new(false)),
         }
     }
 
@@ -251,17 +252,11 @@ impl SyncNaturalPerson {
     }
 
     pub fn update_mental_status(&self, new_status: MentalStatus) -> FanResult<()> {
-        let mut status = self
-            .mental_status
-            .lock()
-            .map_err(|_| FanError::LockError("Mental status lock poisoned".into()))?;
+        let mut status = self.mental_status.write();
 
         *status = new_status.clone();
 
-        let mut base = self
-            .base
-            .write()
-            .map_err(|_| FanError::LockError("Base lock poisoned".into()))?;
+        let mut base = self.base.write();
 
         if let CapacityStatus::NaturalPerson(_) = &mut base.capacity_status {
             base.capacity_status = CapacityStatus::NaturalPerson(NaturalPerson::evaluate_capacity(
@@ -281,17 +276,12 @@ impl SyncNaturalPerson {
     ) -> FanResult<()> {
         // 先检查监护人资格
         let guardian_id = {
-            let guardian_guard = guardian
-                .try_lock()
-                .map_err(|_| FanError::LockError("Guardian lock poisoned".into()))?;
+            let guardian_guard = guardian.lock();
             if !guardian_guard.can_be_guardian()? {
                 return Err(FanError::ValidationError("Invalid guardian".to_string()));
             }
 
-            let base = guardian_guard
-                .base
-                .read()
-                .map_err(|_| FanError::LockError("Guardian base lock poisoned".into()))?;
+            let base = guardian_guard.base.read();
 
             base.id
         };
@@ -300,33 +290,15 @@ impl SyncNaturalPerson {
 
         // 按地址顺序加锁避免死锁
         let (ward_guard, guardian_guard) = if Arc::as_ptr(ward) < Arc::as_ptr(guardian) {
-            (
-                ward.try_lock()
-                    .map_err(|_| FanError::LockError("Ward lock poisoned".into()))?,
-                guardian
-                    .lock()
-                    .map_err(|_| FanError::LockError("Guardian lock poisoned".into()))?,
-            )
+            (ward.try_lock().unwrap(), guardian.lock())
         } else {
-            (
-                guardian
-                    .lock()
-                    .map_err(|_| FanError::LockError("Guardian lock poisoned".into()))?,
-                ward.lock()
-                    .map_err(|_| FanError::LockError("Ward lock poisoned".into()))?,
-            )
+            (guardian.try_lock().unwrap(), ward.lock())
         };
 
         // 更新被监护人状态
         {
-            let mut ward_guardian = ward_guard
-                .guardian
-                .write()
-                .map_err(|_| FanError::LockError("Ward guardian lock poisoned".into()))?;
-            let mut ward_base = ward_guard
-                .base
-                .write()
-                .map_err(|_| FanError::LockError("Ward base lock poisoned".into()))?;
+            let mut ward_guardian = ward_guard.guardian.write();
+            let mut ward_base = ward_guard.base.write();
 
             *ward_guardian = Some(Guardianship {
                 guardian: guardian_id,
@@ -340,14 +312,8 @@ impl SyncNaturalPerson {
 
         // 更新监护人状态
         {
-            let mut guardian_is_guardian = guardian_guard
-                .is_guardian
-                .lock()
-                .map_err(|_| FanError::LockError("Guardian status lock poisoned".into()))?;
-            let mut guardian_base = guardian_guard
-                .base
-                .write()
-                .map_err(|_| FanError::LockError("Guardian base lock poisoned".into()))?;
+            let mut guardian_is_guardian = guardian_guard.is_guardian.write();
+            let mut guardian_base = guardian_guard.base.write();
 
             *guardian_is_guardian = true;
             guardian_base.updated_at = Utc::now();
@@ -357,15 +323,9 @@ impl SyncNaturalPerson {
     }
 
     pub fn can_be_guardian(&self) -> FanResult<bool> {
-        let status = self
-            .mental_status
-            .lock()
-            .map_err(|_| FanError::LockError("Mental status lock poisoned".into()))?;
+        let status = self.mental_status.read();
 
-        let base = self
-            .base
-            .read()
-            .map_err(|_| FanError::LockError("Base lock poisoned".into()))?;
+        let base = self.base.read();
 
         Ok(matches!(
             &base.capacity_status,
@@ -379,52 +339,38 @@ impl SyncNaturalPerson {
         Self {
             base: Arc::new(RwLock::new(person.base)),
             birth_date: person.birth_date,
-            mental_status: Arc::new(Mutex::new(person.mental_status)),
+            mental_status: Arc::new(RwLock::new(person.mental_status)),
             guardian: Arc::new(RwLock::new(person.guardian)),
-            is_guardian: Arc::new(Mutex::new(person.is_guardian)),
+            is_guardian: Arc::new(RwLock::new(person.is_guardian)),
         }
     }
 }
 
 impl Entity for SyncNaturalPerson {
     fn id(&self) -> Uuid {
-        self.base.read().map(|base| base.id).unwrap_or_default()
+        self.base.read().id
     }
 
     fn entity_type(&self) -> EntityType {
-        self.base
-            .read()
-            .map(|base| base.entity_type.clone())
-            .unwrap_or_default()
+        self.base.read().entity_type.clone()
     }
 
     fn capacity_status(&self) -> CapacityStatus {
-        self.base
-            .read()
-            .map(|base| base.capacity_status.clone())
-            .unwrap_or_default()
+        self.base.read().capacity_status.clone()
     }
 
     fn created_at(&self) -> DateTime<Utc> {
-        self.base
-            .read()
-            .map(|base| base.created_at)
-            .unwrap_or_default()
+        self.base.read().created_at
     }
 
     fn updated_at(&self) -> DateTime<Utc> {
-        self.base
-            .read()
-            .map(|base| base.updated_at)
-            .unwrap_or_default()
+        self.base.read().updated_at
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::prelude::*;
-    use uuid::Uuid;
 
     fn get_test_date() -> DateTime<Utc> {
         Utc.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap()
@@ -570,7 +516,7 @@ mod tests {
             .update_mental_status(MentalStatus::PartiallyImpaired)
             .unwrap();
         assert_eq!(
-            *sync_person.mental_status.lock().unwrap(),
+            *sync_person.mental_status.read(),
             MentalStatus::PartiallyImpaired
         );
     }
@@ -605,10 +551,10 @@ mod tests {
         )
         .unwrap();
 
-        let ward_guard = person.guardian.read().unwrap();
+        let ward_guard = person.guardian.read();
         assert!(ward_guard.is_some());
         assert_eq!(
-            ward_guard.as_ref().unwrap().scope.permitted_actions,
+            ward_guard.as_ref().unwrap().scope.permitted_actions.clone(),
             scope.permitted_actions
         );
     }
