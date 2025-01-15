@@ -85,3 +85,17 @@ pub enum AuthorityStatus {
     Limited,   // 受限职权
     Suspended, // 职权被暂停
 }
+
+/// 默认 EntityType 为 NaturalPerson
+impl Default for EntityType {
+    fn default() -> Self {
+        EntityType::NaturalPerson
+    }
+}
+
+/// 默认 CapacityStatus 为 NaturalCapacity::None
+impl Default for CapacityStatus {
+    fn default() -> Self {
+        CapacityStatus::NaturalPerson(NaturalCapacity::None)
+    }
+}
