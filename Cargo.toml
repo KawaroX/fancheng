@@ -10,3 +10,4 @@ license = "MIT"
 chrono = "0.4"
 uuid = { version = "1.4", features = ["v4", "fast-rng", "macro-diagnostics"] }
 parking_lot = "0.12"
+rust_decimal = "1.0"

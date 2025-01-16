@@ -8,7 +8,10 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use uuid::Uuid;
 
-/// 精神状态
+/// # 精神状态
+/// - Normal - 正常
+/// - PartiallyImpaired - 部分受损
+/// - SeverelyImpaired - 严重受损
 #[derive(Debug, Clone, PartialEq)]
 pub enum MentalStatus {
     Normal,            // 正常
@@ -33,6 +36,16 @@ pub struct GuardianshipScope {
 }
 
 /// 自然人
+///
+/// 该结构体表示一个自然人，包含了自然人的基本信息及其与监护人之间的关系。
+/// 自然人可以是成年人或未成年人，可能有监护人，也可能没有。
+///
+/// 字段:
+/// - `base`: 基本实体信息，如姓名、性别等。
+/// - `birth_date`: 出生日期，用于计算年龄。
+/// - `mental_status`: 精神状态，表示自然人的心理健康状况。
+/// - `guardian`: 可选的监护人信息，如果自然人为未成年人或因精神状态需要监护，则该字段存在。
+/// - `is_guardian`: 表示当前自然人是否为监护人的标志。
 #[derive(Debug, Clone)]
 pub struct NaturalPerson {
     base: BaseEntity,
@@ -41,6 +54,7 @@ pub struct NaturalPerson {
     guardian: Option<Guardianship>,
     is_guardian: bool,
 }
+
 
 impl NaturalPerson {
     /// 创建一个新的自然人实体
@@ -235,6 +249,16 @@ impl Entity for NaturalPerson {
     fn updated_at(&self) -> DateTime<Utc> {
         self.base.updated_at
     }
+
+    fn has_capacity(&self) -> bool {
+        match &self.base.capacity_status {
+            CapacityStatus::NaturalPerson(capacity) => match capacity {
+                NaturalCapacity::Full => true,
+                _ => false,
+            },
+            _ => false,
+        }
+    }
 }
 
 /// 线程安全的 NaturalPerson
@@ -412,6 +436,13 @@ impl Entity for SyncNaturalPerson {
 
     fn updated_at(&self) -> DateTime<Utc> {
         self.base.read().updated_at
+    }
+
+    fn has_capacity(&self) -> bool {
+        match self.capacity_status() {
+            CapacityStatus::NaturalPerson(NaturalCapacity::Full) => true,
+            _ => false,
+        }
     }
 }
 

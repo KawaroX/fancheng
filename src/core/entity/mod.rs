@@ -10,3 +10,5 @@ pub use base::{
 pub use legal_person::LegalPerson;
 pub use natural_person::NaturalPerson;
 pub use unincorporated::UnincorporatedOrg;
+pub use natural_person::{Guardianship, GuardianshipScope, MentalStatus};
+pub use legal_person::{LegalPersonType, CompanyType};

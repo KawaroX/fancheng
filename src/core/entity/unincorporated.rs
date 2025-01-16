@@ -218,6 +218,13 @@ impl Entity for SyncUnincorporatedOrg {
     fn updated_at(&self) -> DateTime<Utc> {
         self.base.read().updated_at
     }
+
+    fn has_capacity(&self) -> bool {
+        match self.capacity_status() {
+            CapacityStatus::UnincorporatedOrg(_) => true,
+            _ => false,
+        }
+    }
 }
 
 impl UnincorporatedOrg {
@@ -349,6 +356,13 @@ impl Entity for UnincorporatedOrg {
     }
     fn updated_at(&self) -> DateTime<Utc> {
         self.base.updated_at
+    }
+
+    fn has_capacity(&self) -> bool {
+        match self.capacity_status() {
+            CapacityStatus::UnincorporatedOrg(_) => true,
+            _ => false,
+        }
     }
 }
 

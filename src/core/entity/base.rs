@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use std::collections::HashSet;
+use std::fmt::Debug;
 use uuid::Uuid;
 
 /// 民事主体的类型
@@ -17,6 +18,21 @@ pub trait Entity {
     fn capacity_status(&self) -> CapacityStatus;
     fn created_at(&self) -> DateTime<Utc>;
     fn updated_at(&self) -> DateTime<Utc>;
+    fn has_capacity(&self) -> bool;
+}
+
+impl Debug for dyn Entity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Entity {{ id: {}, entity_type: {:?}, capacity_status: {:?}, created_at: {}, updated_at: {} }}",
+            self.id(),
+            self.entity_type(),
+            self.capacity_status(),
+            self.created_at(),
+            self.updated_at()
+        )
+    }
 }
 
 /// 基础主体信息

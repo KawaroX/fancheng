@@ -164,6 +164,13 @@ impl Entity for LegalPerson {
     fn updated_at(&self) -> DateTime<Utc> {
         self.base.updated_at
     }
+
+    fn has_capacity(&self) -> bool {
+        match self.base.capacity_status {
+            CapacityStatus::LegalPerson(_) => true,
+            _ => false,
+        }
+    }
 }
 
 /// 线程安全版本法人
@@ -295,6 +302,13 @@ impl Entity for SyncLegalPerson {
 
     fn updated_at(&self) -> DateTime<Utc> {
         self.base.read().updated_at
+    }
+
+    fn has_capacity(&self) -> bool {
+        match self.base.read().capacity_status {
+            CapacityStatus::LegalPerson(_) => true,
+            _ => false,
+        }
     }
 }
 
