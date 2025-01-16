@@ -37,7 +37,16 @@ pub enum ContractStatus {
     Invalid,
 }
 
-/// 合同基本特征
+/// # 合同基本特征
+/// - `id`: 合同ID，用于唯一标识合同
+/// - `parties`: 合同参与方列表，每个参与方都是一个实现了`Entity` trait的对象
+/// - `created_at`: 合同创建时间
+/// - `status`: 合同状态，表示合同的当前状态
+/// - `time_limit`: 合同的时间限制，为一个可选的`DateTime`对象，表示合同的截止时间
+/// - `terms`: 合同条款列表，包含合同的详细条款内容
+/// - `validate`: 验证合同的有效性，返回一个`Result`类型，表示验证的结果
+/// - `make_effective`: 使合同的状态变为`Effective`，表示合同已经生效
+/// - `terminate`: 使合同的状态变为`Terminated`，表示合同被解除
 pub trait Contract {
     /// 获取合同ID
     fn id(&self) -> Uuid;
@@ -61,24 +70,15 @@ pub trait Contract {
     fn terminate(&mut self) -> FanResult<()>;
 }
 
-// /// 合同类型
-// #[derive(Debug, Clone, PartialEq)]
-// pub enum ContractType {
-//     /// 有名合同
-//     Sale,                   // 买卖合同
-//     Lease,                  // 租赁合同
-//     Guarantee,              // 保证合同
-//     Construction,           // 建设工程合同
-//     Technology,             // 技术合同
-//     Storage,                // 仓储合同
-//     Commission,             // 委托合同
-//     // ... 其他典型合同类型
-//
-//     /// 非典型合同（带名称）
-//     Atypical(String),
-// }
-
-/// 基础合同结构
+/// # 基础合同结构
+/// - `id`: 合同ID，用于唯一标识合同
+/// - `parties`: 合同参与方列表，每个参与方都是一个实现了`Entity` trait的对象
+/// - `intent_declarations`: 意图声明的列表，明确了合同中各方的意图
+/// - `terms`: 合同条款的列表，详细说明了合同的条款内容
+/// - `created_at`: 创建时间，表示合同的创建时间
+/// - `effective_at`: 生效时间，表示合同的生效时间
+/// - `time_limit`: 履行期限，为一个可选的`DateTime`对象，表示合同的履行期限
+/// - `status`: 合同状态，表示合同的当前状态
 #[derive(Debug)]
 pub struct BaseContract {
     /// 合同ID

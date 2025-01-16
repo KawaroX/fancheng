@@ -5,6 +5,7 @@ use std::cmp::PartialEq;
 use rust_decimal::Decimal;
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
+use std::fmt::Display;
 use uuid::Uuid;
 
 /// 标的物类型
@@ -22,6 +23,38 @@ pub enum SubjectMatterType {
     Other(String),
 }
 
+impl SubjectMatterType {
+    /// 创建新的标的物类型
+    ///
+    /// 该构造函数用于初始化一个标的物类型的实例，其中包含了标的物类型的名称。
+    ///
+    /// # 参数 Arguments
+    /// - `name`: 标的物类型名称，表示标的物的类型，如特定物、种类物、特定服务等。
+    ///
+    /// # 返回值 Returns
+    /// 返回一个标的物类型的实例，其中包含了提供的参数值。
+    pub fn new(name: String) -> Self {
+        match name.as_str() {
+            "specific_goods" => Self::SpecificGoods,
+            "generic_goods" => Self::GenericGoods,
+            "service" => Self::Service,
+            "intellectual_property" => Self::IntellectualProperty,
+            _ => Self::Other(name),
+        }
+    }
+
+    /// 获取标的物类型的名称
+    fn to_string(&self) -> String {
+        match self {
+            Self::SpecificGoods => "specific_goods".to_string(),
+            Self::GenericGoods => "generic_goods".to_string(),
+            Self::Service => "service".to_string(),
+            Self::IntellectualProperty => "intellectual_property".to_string(),
+            Self::Other(name) => name.clone(),
+        }
+    }
+}
+
 /// 标的物
 #[derive(Debug, Clone)]
 pub struct SubjectMatter {
@@ -33,6 +66,61 @@ pub struct SubjectMatter {
     name: String,
     /// 标的物描述
     description: Option<String>,
+}
+
+impl SubjectMatter {
+    /// 创建新的标的物
+    ///
+    /// 该构造函数用于初始化一个标的物的实例，其中包含了标的物的ID、类型、名称和描述。
+    ///
+    /// # 参数 Arguments
+    /// - `id`: 标的物ID，用于唯一标识标的物。
+    /// - `subject_type`: 标的物类型，表示标的物的类型，如特定物、种类物、特定服务等。
+    /// - `name`: 标的物名称，表示标的物的名称。
+    /// - `description`: 标的物描述，表示标的物的描述信息。
+    ///
+    /// # 返回值 Returns
+    /// 返回一个标的物的实例，其中包含了提供的参数值。
+    pub fn new(
+        id: Uuid,
+        subject_type: SubjectMatterType,
+        name: String,
+        description: Option<String>,
+    ) -> Self {
+        Self {
+            id,
+            subject_type,
+            name,
+            description,
+        }
+    }
+}
+
+impl Display for SubjectMatter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}_{}", self.name, self.subject_type.to_string())
+    }
+}
+
+impl PartialEq for SubjectMatter {
+    fn eq(&self, other: &Self) -> bool {
+        if self.id == other.id || (self.name == other.name && self.subject_type == other.subject_type) {
+            true
+        } else {
+            false
+        }
+    }
+}
+
+impl Default for SubjectMatter {
+    fn default() -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            subject_type: SubjectMatterType::Other("".to_string()),
+            name: "".to_string(),
+            description: None,
+        }
+    }
 }
 
 /// 数量单位
@@ -50,9 +138,9 @@ pub enum QuantityUnit {
 #[derive(Debug, Clone)]
 pub struct Quantity {
     /// 数值
-    amount: Decimal,
+    pub(crate) amount: Decimal,
     /// 单位
-    unit: QuantityUnit,
+    pub(crate) unit: QuantityUnit,
 }
 
 /// 质量要求
@@ -77,6 +165,17 @@ pub struct Price {
     payment_method: String,
     /// 支付期限
     payment_deadline: Option<DateTime<Utc>>,
+}
+
+impl Price {
+    pub fn new(amount: Decimal, currency: String, payment_method: String) -> Self {
+        Self {
+            amount,
+            currency,
+            payment_method,
+            payment_deadline: None,
+        }
+    }
 }
 
 /// 履行地点
@@ -120,27 +219,6 @@ pub struct IntentContent {
     pub additional_obligations: Vec<String>,
     /// 其他条款
     pub additional_terms: HashMap<String, String>,
-}
-
-impl PartialEq for SubjectMatter {
-    fn eq(&self, other: &Self) -> bool {
-        if self.id == other.id || (self.name == other.name && self.subject_type == other.subject_type) {
-            true
-        } else {
-            false
-        }
-    }
-}
-
-impl Default for SubjectMatter {
-    fn default() -> Self {
-        Self {
-            id: Uuid::new_v4(),
-            subject_type: SubjectMatterType::Other("".to_string()),
-            name: "".to_string(),
-            description: None,
-        }
-    }
 }
 
 impl IntentContent {
@@ -208,6 +286,36 @@ impl IntentContent {
                 true
             }
         }
+    }
+
+    /// 计算必要内容的哈希值
+    /// 只包含合同成立所必需的要素
+    pub fn essential_hash(&self) -> String {
+        // 组合必要内容
+        let mut essential = Vec::new();
+
+        // 添加标的物的必要信息
+        essential.push(self.subject_matter.to_string());
+
+        // 如果有价款，添加价款信息
+        if let Some(ref price) = self.price {
+            essential.push(format!("{}_{}", price.amount, price.currency));
+        }
+
+        // 如果有数量，添加数量信息
+        if let Some(ref quantity) = self.quantity {
+            essential.push(format!("{}_{:?}", quantity.amount, quantity.unit));
+        }
+
+        // 组合并计算哈希
+        use sha2::{Sha256, Digest};
+        let mut hasher = Sha256::new();
+        hasher.update(essential.join("_"));
+        let result = hasher.finalize();
+        println!("---");
+        println!("{:?}", result);
+        println!("---");
+        format!("0x{}", hex::encode(result))
     }
 
     /// 添加附随义务

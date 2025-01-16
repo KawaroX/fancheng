@@ -11,3 +11,5 @@ chrono = "0.4"
 uuid = { version = "1.4", features = ["v4", "fast-rng", "macro-diagnostics"] }
 parking_lot = "0.12"
 rust_decimal = "1.0"
+sha2 = "0.11.0-pre.4"
+hex = "0.4.3"
