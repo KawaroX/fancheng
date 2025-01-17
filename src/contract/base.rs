@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 use std::sync::Arc;
 
-use crate::{FanError, FanResult};
+use crate::{FanError, FanResult, ValidationErrorType};
 use crate::core::entity::Entity;
 use super::intent::declaration::{IntentDeclaration, DeclarationType};
 
@@ -140,13 +140,23 @@ impl BaseContract {
     fn validate_parties(&self) -> FanResult<()> {
         // 检查当事人数量
         if self.parties.is_empty() {
-            return Err(FanError::ValidationError("合同当事人不能为空".to_string()));
+            return Err(FanError::validation(
+                "合同当事人不能为空",
+                ValidationErrorType::ContractPartyUnqualified,
+                "validate_parties",
+                "BaseContract",
+            ));
         }
 
         // 检查每个当事人的行为能力
         for party in &self.parties {
             if !party.has_capacity() {
-                return Err(FanError::ValidationError("当事人缺乏必要的行为能力".to_string()));
+                return Err(FanError::validation(
+                    "当事人缺乏必要的行为能力",
+                    ValidationErrorType::EntityCapacityLacking,
+                    "validate_parties",
+                    "BaseContract",
+                ));
             }
         }
 
@@ -158,16 +168,31 @@ impl BaseContract {
         // 要约
         let offer = self.intent_declarations.iter()
             .find(|d| matches!(d.declaration_type(), DeclarationType::Offer))
-            .ok_or_else(|| FanError::ValidationError("缺少要约".to_string()))?;
+            .ok_or_else(|| FanError::validation(
+                "缺少要约",
+                ValidationErrorType::ContractElementMissing,
+                "validate_declarations",
+                "BaseContract",
+            ))?;
 
         // 承诺
         let acceptance = self.intent_declarations.iter()
             .find(|d| matches!(d.declaration_type(), DeclarationType::Acceptance))
-            .ok_or_else(|| FanError::ValidationError("缺少承诺".to_string()))?;
+            .ok_or_else(|| FanError::validation(
+                "缺少承诺",
+                ValidationErrorType::ContractElementMissing,
+                "validate_declarations",
+                "BaseContract",
+            ))?;
 
         // 检查要约和承诺的实质性内容是否一致
         if !offer.content().matches_essential_terms(&acceptance.content()) {
-            return Err(FanError::ValidationError("要约和承诺的实质性内容不一致".to_string()));
+            return Err(FanError::validation(
+                "要约和承诺的实质性内容不一致",
+                ValidationErrorType::IntentMatchFailure,
+                "validate_declarations",
+                "BaseContract",
+            ));
         }
 
         Ok(())
@@ -215,7 +240,12 @@ impl Contract for BaseContract {
     fn terminate(&mut self) -> FanResult<()> {
         // 检查是否可以解除
         if self.status != ContractStatus::Effective && self.status != ContractStatus::InProgress {
-            return Err(FanError::ValidationError("只有生效的合同才能解除".to_string()));
+            return Err(FanError::validation(
+                "只有生效的合同才能解除",
+                ValidationErrorType::ContractStatusIllegal,
+                "terminate",
+                "BaseContract",
+            ));
         }
 
         // 更新状态

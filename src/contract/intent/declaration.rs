@@ -1,14 +1,12 @@
 //! 意思表示的核心定义
 //! 包括意思表示的类型、结构和基本行为
 
-use std::collections::HashSet;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 use super::content::IntentContent;
 use crate::core::entity::Entity;
-// use std::collections::HashMap;
 use std::sync::Arc;
-use crate::{FanError, FanResult};
+use crate::{FanError, FanResult, ValidationErrorType};
 
 /// # 意思表示的类型
 /// - Offer：要约
@@ -103,13 +101,25 @@ impl IntentDeclaration {
         content: IntentContent,
         valid_until: Option<DateTime<Utc>>,
     ) -> FanResult<Self> {
-        // 先验证两方当事人的行为能力
+        // 先验证表意人的行为能力
         if !declarant.has_capacity() {
-            return Err(FanError::ValidationError("表意人无行为能力".to_string()));
+            return Err(FanError::validation(
+                "表意人无行为能力",
+                ValidationErrorType::EntityCapacityLacking,
+                "new_intent_declaration",
+                "IntentDeclaration",
+            ))
         }
+
+        // 验证相对人的行为能力
         if let Some(ref r) = recipient {
             if !r.has_capacity() {
-                return Err(FanError::ValidationError("相对人无行为能力".to_string()));
+                return Err(FanError::validation(
+                    "相对人无行为能力",
+                    ValidationErrorType::EntityCapacityLacking,
+                    "new_intent_declaration",
+                    "IntentDeclaration",
+                ))
             }
         }
 
@@ -208,8 +218,8 @@ impl IntentDeclaration {
     pub fn matches(&self, other: &IntentDeclaration) -> bool {
         self.match_code == other.match_code || (
             self.declaration_type == other.declaration_type
-            && self.declarant.id() == other.declarant.id()
-            && self.recipient.as_ref().map(|r| r.id()) == other.recipient.as_ref().map(|r| r.id())
+                && self.declarant.id() == other.declarant.id()
+                && self.recipient.as_ref().map(|r| r.id()) == other.recipient.as_ref().map(|r| r.id())
         )
     }
 
@@ -240,91 +250,84 @@ impl IntentDeclaration {
     }
 
     /// 验证表意人的行为能力
-    ///
-    /// 此函数旨在确认表意人是否具有完成民事行为的能力如果表意人没有相应的行为能力，
-    /// 则会返回一个错误，表明验证失败如果有相对人存在，也会对其进行相同的行为能力验证
-    ///
-    /// # Returns
-    /// * `Ok(())` 如果表意人（和相对人，如果有）都有行为能力
-    /// * `Err(FanError::ValidationError)` 如果表意人或相对人没有行为能力
     pub fn validate_capacity(&self) -> FanResult<()> {
         // 检查表意人的行为能力
         if !self.declarant.has_capacity() {
-            return Err(FanError::ValidationError("表意人无行为能力".to_string()));
+            return Err(FanError::validation(
+                "表意人无行为能力",
+                ValidationErrorType::EntityCapacityLacking,
+                "validate_capacity",
+                "IntentDeclaration",
+            ))
         }
 
         // 如果有相对人，也需要检查相对人的行为能力
         if let Some(ref recipient) = self.recipient {
             if !recipient.has_capacity() {
-                return Err(FanError::ValidationError("相对人无行为能力".to_string()));
+                return Err(FanError::validation(
+                    "相对人无行为能力",
+                    ValidationErrorType::EntityCapacityLacking,
+                    "validate_capacity",
+                    "IntentDeclaration",
+                ))
             }
         }
 
-        // 如果所有涉及方都有行为能力，则返回Ok
         Ok(())
     }
 
     /// 撤回意思表示（在到达相对人之前）
-    ///
-    /// 此方法用于撤回一个尚未生效的意思表示。只有当声明的状态为"Created"时，
-    /// 即尚未发送或生效时，才可以撤回。如果状态不满足条件，则撤回操作将失败，并返回错误信息。
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(())`: 成功撤回意思表示，将状态更新为"Revoked"。
-    /// - `Err(&'static str)`: 如果状态不为"Created"，则返回错误信息，表明只能撤回尚未生效的意思表示。
-    pub fn revoke(&mut self) -> Result<(), &'static str> {
-        // 检查当前状态是否为"Created"，只有此状态下才能进行撤回操作
+    pub fn revoke(&mut self) -> FanResult<()> {
         if self.status != DeclarationStatus::Created {
-            // 如果状态不为"Created"，返回错误信息
-            return Err("只能撤回尚未生效的意思表示");
+            return Err(FanError::validation(
+                "只能撤回尚未生效的意思表示",
+                ValidationErrorType::IntentStatusVoid,
+                "revoke",
+                "IntentDeclaration",
+            ))
         }
-        // 撤回成功，更新状态为"Revoked"
         self.status = DeclarationStatus::Revoked;
-        // 返回Ok，表示撤回操作成功
         Ok(())
     }
 
     /// 撤销意思表示（在到达相对人之后）
-    ///
-    /// 此方法用于撤销一个已经生效的意思表示。只能在意思表示处于生效状态时进行撤销操作，
-    /// 否则将返回一个错误信息。撤销成功后，意思表示的状态将被更新为已撤销。
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` - 撤销成功，意思表示的状态已更新为已撤销。
-    /// * `Err(&'static str)` - 如果意思表示尚未生效或已经处于其他状态，则返回相应的错误信息。
-    pub fn withdraw(&mut self) -> Result<(), &'static str> {
-        // 检查当前意思表示的状态是否为生效，只有生效状态的意思表示才能被撤销
+    pub fn withdraw(&mut self) -> FanResult<()> {
         if self.status != DeclarationStatus::Effective {
-            // 如果状态不是生效，则返回错误信息
-            return Err("只能撤销已经生效的意思表示");
+            return Err(FanError::validation(
+                "只能撤销已经生效的意思表示",
+                ValidationErrorType::IntentStatusVoid,
+                "withdraw",
+                "IntentDeclaration",
+            ))
         }
-        // 更新意思表示的状态为已撤销
         self.status = DeclarationStatus::Withdrawn;
-        // 撤销成功，返回Ok
         Ok(())
     }
 
     /// 使意思表示生效
-    ///
-    /// 该函数旨在将一个新创建的意思表示标记为生效。确保意思表示只能在
-    /// 其创建后立即生效，防止对已使用或已过期的意思表示进行操作。
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(())`: 当意思表示成功标记为生效时返回。
-    /// - `Err(&'static str)`: 当意思表示的状态不是新创建时返回错误信息。
-    pub fn make_effective(&mut self) -> Result<(), &'static str> {
-        // 检查当前意思表示的状态是否为新创建，只有新创建的意思表示才能生效。
+    pub fn make_effective(&mut self) -> FanResult<()> {
         if self.status != DeclarationStatus::Created {
-            return Err("只有新创建的意思表示才能生效");
+            return Err(FanError::validation(
+                "只有新创建的意思表示才能生效",
+                ValidationErrorType::IntentStatusVoid,
+                "make_effective",
+                "IntentDeclaration",
+            ))
         }
-
-        // 将意思表示的状态更新为生效。
         self.status = DeclarationStatus::Effective;
         Ok(())
     }
+
+    /// 标记意思表示已到达相对人
+    pub fn mark_as_delivered(&mut self) -> FanResult<()> {
+        self.delivered_at = Some(Utc::now());
+        self.status = DeclarationStatus::Effective;
+        Ok(())
+    }
+
+}
+
+impl IntentDeclaration {
 
     /// 获取意思表示的类型
     pub fn declaration_type(&self) -> DeclarationType {
@@ -367,60 +370,31 @@ impl IntentDeclaration {
     }
 }
 
-/// 意思表示到达时的效果
-impl IntentDeclaration {
-    /// 标记意思表示已到达相对人
-    pub fn mark_as_delivered(&mut self) -> FanResult<()> {
-        self.delivered_at = Some(Utc::now());
-        self.status = DeclarationStatus::Effective;
-        Ok(())
-    }
-}
-
-// #[cfg(test)]
-// mod tests {
-//     use chrono::TimeZone;
-//     use super::*;
-//     use crate::core::entity;
-//
-//     #[test]
-//     fn test_intent_declaration_with_entities() {
-//         let birthday = Utc.with_ymd_and_hms(1990, 1, 1, 0, 0, 0).unwrap();
-//         // 创建一个自然人作为表意人
-//         let declarant = Arc::new(entity::NaturalPerson::new(birthday, entity::MentalStatus::Normal));
-//
-//         // 创建一个公司法定代表人
-//         let legal_representative = entity::NaturalPerson::new(birthday, entity::MentalStatus::Normal);
-//
-//         // 创建一个法人作为相对人
-//         let recipient = Arc::new(entity::LegalPerson::new(entity::LegalPersonType::Company(entity::CompanyType::Limited), 1000000.0, legal_representative.id(), "北京".to_string(), Utc.with_ymd_and_hms(2023, 1, 1, 0, 0, 0).unwrap()));
-//
-//         // 创建意思表示
-//         let declaration = IntentDeclaration::new(
-//             DeclarationType::Offer,
-//             declarant,
-//             Some(recipient),
-//             IntentContent::default(),
-//             None,
-//         );
-//
-//         // 验证行为能力
-//         assert!(declaration.unwrap().validate_capacity().is_ok());
-//     }
-// }
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use chrono::{Duration, Utc};
+    use chrono::TimeZone;
     use crate::core::entity::{
-        Entity, NaturalPerson, MentalStatus,
-        CapacityStatus, NaturalCapacity
+        Entity, NaturalPerson, MentalStatus, LegalPerson, LegalPersonType, CompanyType
     };
     use std::sync::Arc;
     use rust_decimal::Decimal;
     use crate::contract::intent::content::{Quantity, QuantityUnit, SubjectMatter, SubjectMatterType};
 
+    fn test_content() -> IntentContent {
+        IntentContent::new(
+            SubjectMatter::new(Uuid::new_v4(), SubjectMatterType::GenericGoods, "测试商品".to_string(), Some("商品描述".to_string())),
+            Some(Quantity {
+                amount: Decimal::try_from(1.0).unwrap(),
+                unit: QuantityUnit::Piece,
+            }),
+            None,
+            Some(crate::contract::intent::content::Price::new(Decimal::try_from(100.0).unwrap(), "CNY".to_string(), "现金".to_string())),
+            None,
+            None,
+        )
+    }
     #[test]
     fn test_matching_intent_declarations() {
         // 创建两个自然人作为测试主体
@@ -436,15 +410,7 @@ mod tests {
         ));
 
         // 创建相同内容的意思表示
-        let offer_content = IntentContent {
-            subject_matter: SubjectMatter::new(Uuid::new_v4(), SubjectMatterType::GenericGoods, "测试商品".to_string(), Some("商品描述".to_string())),
-            price: Some(crate::contract::intent::content::Price::new(Decimal::try_from(100.0).unwrap(), "CNY".to_string(), "现金".to_string())),
-            quantity: Some(Quantity {
-                amount: Decimal::try_from(1.0).unwrap(),
-                unit: QuantityUnit::Piece,
-            }),
-            ..Default::default()
-        };
+        let offer_content = test_content();
 
         // A向B发出要约
         let mut declaration_a = IntentDeclaration::new(
@@ -499,15 +465,7 @@ mod tests {
             MentalStatus::Normal,
         ));
 
-        let content = IntentContent {
-            subject_matter: SubjectMatter::new(Uuid::new_v4(), SubjectMatterType::GenericGoods, "测试商品".to_string(), Some("商品描述".to_string())),
-            price: Some(crate::contract::intent::content::Price::new(Decimal::try_from(100.0).unwrap(), "CNY".to_string(), "现金".to_string())),
-            quantity: Some(Quantity {
-                amount: Decimal::try_from(1.0).unwrap(),
-                unit: QuantityUnit::Piece,
-            }),
-            ..Default::default()
-        };
+        let content = test_content();
 
         // 无民事行为能力人不能发出意思表示
         let result = IntentDeclaration::new(
@@ -520,4 +478,36 @@ mod tests {
 
         assert!(result.is_err());
     }
+
+        #[test]
+        fn test_intent_declaration_with_entities() {
+            let birthday = Utc.with_ymd_and_hms(1990, 1, 1, 0, 0, 0).unwrap();
+            // 创建一个自然人作为表意人
+            let declarant = Arc::new(NaturalPerson::new(birthday, MentalStatus::Normal));
+
+            // 创建一个公司法定代表人
+            let legal_representative = NaturalPerson::new(birthday, MentalStatus::Normal);
+
+            // 创建一个法人作为相对人
+            let recipient = Arc::new(
+                LegalPerson::new(
+                    LegalPersonType::Company(CompanyType::Limited),
+                    1000000.0,
+                    legal_representative.id(),
+                    "北京".to_string(),
+                    Utc.with_ymd_and_hms(2023, 1, 1, 0, 0, 0).unwrap())
+            );
+
+            // 创建意思表示
+            let declaration = IntentDeclaration::new(
+                DeclarationType::Offer,
+                declarant,
+                Some(recipient),
+                IntentContent::default(),
+                None,
+            );
+
+            // 验证行为能力
+            assert!(declaration.unwrap().validate_capacity().is_ok());
+        }
 }

@@ -1,4 +1,4 @@
-use crate::FanError;
+use crate::{FanError, ValidationErrorType};
 use crate::FanResult;
 
 use crate::core::entity::base::{
@@ -78,8 +78,11 @@ impl LegalPerson {
             self.base.updated_at = Utc::now();
             Ok(())
         } else {
-            Err(FanError::ValidationError(
-                "Invalid capacity status type".to_string(),
+            Err(FanError::validation(
+                "Invalid capacity status type",
+                ValidationErrorType::EntityError,
+                "add_permitted_activity",
+                "LegalPerson",
             ))
         }
     }
@@ -96,8 +99,11 @@ impl LegalPerson {
             self.base.updated_at = Utc::now();
             Ok(())
         } else {
-            Err(FanError::ValidationError(
-                "Invalid capacity status type".to_string(),
+            Err(FanError::validation(
+                "Invalid capacity status type",
+                ValidationErrorType::EntityError,
+                "add_restriction",
+                "LegalPerson",
             ))
         }
     }
@@ -109,8 +115,11 @@ impl LegalPerson {
             self.base.updated_at = Utc::now();
             Ok(())
         } else {
-            Err(FanError::ValidationError(
-                "Invalid capacity status type".to_string(),
+            Err(FanError::validation(
+                "Invalid capacity status type",
+                ValidationErrorType::EntityError,
+                "update_business_status",
+                "LegalPerson",
             ))
         }
     }
@@ -217,8 +226,11 @@ impl SyncLegalPerson {
 
     pub fn update_registered_capital(&self, new_capital: f64) -> FanResult<()> {
         if new_capital <= 0.0 {
-            return Err(FanError::ValidationError(
-                "Invalid capital amount".to_string(),
+            return Err(FanError::validation(
+                "Invalid registered capital value",
+                ValidationErrorType::EntityError,
+                "update_registered_capital",
+                "SyncLegalPerson",
             ));
         }
 
@@ -240,8 +252,11 @@ impl SyncLegalPerson {
             base.updated_at = Utc::now();
             Ok(())
         } else {
-            Err(FanError::ValidationError(
-                "Invalid capacity status type".to_string(),
+            Err(FanError::validation(
+                "Invalid capacity status type",
+                ValidationErrorType::EntityError,
+                "add_permitted_activity",
+                "SyncLegalPerson",
             ))
         }
     }

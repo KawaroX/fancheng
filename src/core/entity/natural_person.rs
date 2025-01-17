@@ -1,4 +1,4 @@
-use crate::FanError;
+use crate::{FanError, ValidationErrorType};
 use crate::FanResult;
 
 use crate::core::entity::base::{BaseEntity, CapacityStatus, Entity, EntityType, NaturalCapacity};
@@ -139,7 +139,12 @@ impl NaturalPerson {
     /// 设置监护人，并修改作为监护人的 NaturalPerson 实例
     pub fn set_guardian(&mut self, guardian: &mut Self, scope: GuardianshipScope) -> FanResult<()> {
         if !guardian.can_be_guardian() {
-            return Err(FanError::ValidationError("Invalid guardian".to_string()));
+            return Err(FanError::validation(
+                "Invalid guardian",
+                ValidationErrorType::EntityStatusIllegal,
+                "set_guardian",
+                "NaturalPerson",
+            ))
         }
 
         self.guardian = Some(Guardianship {
@@ -349,7 +354,12 @@ impl SyncNaturalPerson {
         let guardian_id = {
             let guardian_guard = guardian.lock();
             if !guardian_guard.can_be_guardian()? {
-                return Err(FanError::ValidationError("Invalid guardian".to_string()));
+                return Err(FanError::validation(
+                    "Invalid guardian",
+                    ValidationErrorType::EntityStatusIllegal,
+                    "set_guardian",
+                    "SyncNaturalPerson",
+                ));
             }
 
             let base = guardian_guard.base.read();

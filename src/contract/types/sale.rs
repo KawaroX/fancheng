@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 use std::sync::Arc;
 
-use crate::{FanError, FanResult};
+use crate::{FanError, FanResult, ValidationErrorType};
 use crate::core::entity::Entity;
 use super::super::base::{Contract, BaseContract, ContractStatus};
 use super::super::typical::TypicalContract;
@@ -126,27 +126,44 @@ impl Contract for SaleContract {
 
 impl TypicalContract for SaleContract {
     fn validate_legal_requirements(&self) -> FanResult<()> {
-        // 验证买卖合同特有的要求
-
-        // 1. 验证标的物
+        // 验证标的物
         if self.subject.name.is_empty() {
-            return Err(FanError::ValidationError("标的物名称不能为空".to_string()));
+            return Err(FanError::validation(
+                "标的物名称不能为空",
+                ValidationErrorType::ContractElementMissing,
+                "validate_legal_requirements",
+                "SaleContract",
+            ));
         }
+
         if self.subject.quantity <= 0.0 {
-            return Err(FanError::ValidationError("标的物数量必须大于0".to_string()));
+            return Err(FanError::validation(
+                "标的物数量必须大于0",
+                ValidationErrorType::ContractContentIllegal,
+                "validate_legal_requirements",
+                "SaleContract",
+            ));
         }
 
-        // 2. 验证价款
+        // 验证价款
         if self.price.amount <= 0.0 {
-            return Err(FanError::ValidationError("价款必须大于0".to_string()));
+            return Err(FanError::validation(
+                "价款必须大于0",
+                ValidationErrorType::ContractContentIllegal,
+                "validate_legal_requirements",
+                "SaleContract",
+            ));
         }
 
-        // 3. 验证当事人身份
+        // 验证当事人身份
         if self.base.parties().len() != 2 {
-            return Err(FanError::ValidationError("买卖合同必须有且仅有两个当事人".to_string()));
+            return Err(FanError::validation(
+                "买卖合同必须有且仅有两个当事人",
+                ValidationErrorType::ContractPartyUnqualified,
+                "validate_legal_requirements",
+                "SaleContract",
+            ));
         }
-
-        // 4. 其他必要的验证...
 
         Ok(())
     }

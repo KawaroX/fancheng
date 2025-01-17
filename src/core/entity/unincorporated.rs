@@ -1,4 +1,4 @@
-use crate::FanError;
+use crate::{FanError, ValidationErrorType};
 use crate::FanResult;
 
 use crate::core::entity::base::{
@@ -63,6 +63,162 @@ pub struct UnincorporatedOrg {
     establishment_date: DateTime<Utc>,
 }
 
+impl UnincorporatedOrg {
+    pub fn new(
+        org_type: UnincorporatedOrgType,
+        registered_address: String,
+        establishment_date: DateTime<Utc>,
+    ) -> Self {
+        let now = Utc::now();
+        let authority_scope = AuthorityScope {
+            status: AuthorityStatus::Full,
+            permitted_authorities: HashSet::new(),
+            restrictions: None,
+        };
+
+        Self {
+            base: BaseEntity {
+                id: Uuid::new_v4(),
+                entity_type: EntityType::UnincorporatedOrg,
+                capacity_status: CapacityStatus::UnincorporatedOrg(authority_scope),
+                created_at: now,
+                updated_at: now,
+            },
+            org_type,
+            executive_partner: None,
+            proprietor: None,
+            members: Vec::new(),
+            registered_address,
+            establishment_date,
+        }
+    }
+
+    /// 添加合伙人
+    pub fn add_partner(&mut self, partner: Partner) -> FanResult<()> {
+        match self.org_type {
+            UnincorporatedOrgType::Partnership(_) => {
+                self.members.push(partner);
+                self.base.updated_at = Utc::now();
+                Ok(())
+            }
+            _ => Err(FanError::validation(
+                "Only partnership can add partners",
+                ValidationErrorType::EntityCapacityLacking,
+                "add_partner",
+                "UnincorporatedOrg"
+            )),
+        }
+    }
+
+    /// 设置执行事务合伙人
+    pub fn set_executive_partner(&mut self, partner_id: Uuid) -> FanResult<()> {
+        match self.org_type {
+            UnincorporatedOrgType::Partnership(_) => {
+                if self.members.iter().any(|p| p.id == partner_id) {
+                    self.executive_partner = Some(partner_id);
+                    self.base.updated_at = Utc::now();
+                    Ok(())
+                } else {
+                    Err(FanError::validation(
+                        "Partner not found",
+                        ValidationErrorType::EntityError,
+                        "set_executive_partner",
+                        "UnincorporatedOrg"
+                    ))
+                }
+            }
+            _ => Err(FanError::validation(
+                "Only partnership can set executive partner",
+                ValidationErrorType::EntityCapacityLacking,
+                "set_executive_partner",
+                "UnincorporatedOrg"
+            )),
+        }
+    }
+
+    /// 添加职权范围
+    pub fn add_authority(&mut self, authority: String) -> FanResult<()> {
+        if let CapacityStatus::UnincorporatedOrg(scope) = &mut self.base.capacity_status {
+            scope.permitted_authorities.insert(authority);
+            self.base.updated_at = Utc::now();
+            Ok(())
+        } else {
+            Err(FanError::validation(
+                "Invalid capacity status type",
+                ValidationErrorType::EntityCapacityLacking,
+                "update_authority_status",
+                "UnincorporatedOrg"
+            ))
+        }
+    }
+
+    /// 更新职权状态
+    pub fn update_authority_status(&mut self, new_status: AuthorityStatus) -> FanResult<()> {
+        if let CapacityStatus::UnincorporatedOrg(scope) = &mut self.base.capacity_status {
+            scope.status = new_status;
+            self.base.updated_at = Utc::now();
+            Ok(())
+        } else {
+            Err(FanError::validation(
+                "Invalid capacity status type",
+                ValidationErrorType::EntityCapacityLacking,
+                "update_authority_status",
+                "UnincorporatedOrg"
+            ))
+        }
+    }
+
+    /// 检查是否可以进行特定活动
+    pub fn can_perform_activity(&self, activity: &str) -> bool {
+        if let CapacityStatus::UnincorporatedOrg(scope) = &self.base.capacity_status {
+            match scope.status {
+                AuthorityStatus::Full => {
+                    scope.permitted_authorities.contains(activity)
+                        && !scope
+                        .restrictions
+                        .as_ref()
+                        .map_or(false, |r| r.contains(&activity.to_string()))
+                }
+                AuthorityStatus::Limited => {
+                    scope.permitted_authorities.contains(activity)
+                        && !scope
+                        .restrictions
+                        .as_ref()
+                        .map_or(false, |r| r.contains(&activity.to_string()))
+                }
+                AuthorityStatus::Suspended => false,
+            }
+        } else {
+            false
+        }
+    }
+}
+
+impl Entity for UnincorporatedOrg {
+    fn id(&self) -> Uuid {
+        self.base.id
+    }
+    fn entity_type(&self) -> EntityType {
+        self.base.entity_type.clone()
+    }
+    fn capacity_status(&self) -> CapacityStatus {
+        self.base.capacity_status.clone()
+    }
+    fn created_at(&self) -> DateTime<Utc> {
+        self.base.created_at
+    }
+    fn updated_at(&self) -> DateTime<Utc> {
+        self.base.updated_at
+    }
+
+    fn has_capacity(&self) -> bool {
+        match self.capacity_status() {
+            CapacityStatus::UnincorporatedOrg(_) => true,
+            _ => false,
+        }
+    }
+}
+
 /// 线程安全版本非法人组织
 #[derive(Debug)]
 pub struct SyncUnincorporatedOrg {
@@ -110,9 +266,12 @@ impl SyncUnincorporatedOrg {
                 self.base.write().updated_at = Utc::now();
                 Ok(())
             }
-            _ => Err(FanError::ValidationError(
-                "Only partnership can add partners".to_string(),
-            )),
+            _ => Err(FanError::validation(
+                "Only partnership can add partners",
+                ValidationErrorType::EntityStatusIllegal,
+                "add_partner",
+                "SyncUnincorporatedOrg"
+            ))
         }
     }
 
@@ -126,11 +285,19 @@ impl SyncUnincorporatedOrg {
                     self.base.write().updated_at = Utc::now();
                     Ok(())
                 } else {
-                    Err(FanError::ValidationError("Partner not found".to_string()))
+                    Err(FanError::validation(
+                        "Partner not found",
+                        ValidationErrorType::EntityError,
+                        "set_executive_partner",
+                        "SyncUnincorporatedOrg"
+                    ))
                 }
             }
-            _ => Err(FanError::ValidationError(
-                "Only partnership can set executive partner".to_string(),
+            _ => Err(FanError::validation(
+                "Only partnership can set executive partner",
+                ValidationErrorType::EntityCapacityLacking,
+                "set_executive_partner",
+                "SyncUnincorporatedOrg"
             )),
         }
     }
@@ -142,8 +309,11 @@ impl SyncUnincorporatedOrg {
             base.updated_at = Utc::now();
             Ok(())
         } else {
-            Err(FanError::ValidationError(
-                "Invalid capacity status type".to_string(),
+            Err(FanError::validation(
+                "Invalid capacity status type",
+                ValidationErrorType::EntityStatusIllegal,
+                "add_authority",
+                "SyncUnincorporatedOrg"
             ))
         }
     }
@@ -155,8 +325,11 @@ impl SyncUnincorporatedOrg {
             base.updated_at = Utc::now();
             Ok(())
         } else {
-            Err(FanError::ValidationError(
-                "Invalid capacity status type".to_string(),
+            Err(FanError::validation(
+                "Invalid capacity status type",
+                ValidationErrorType::EntityStatusIllegal,
+                "update_authority_status",
+                "SyncUnincorporatedOrg"
             ))
         }
     }
@@ -227,144 +400,7 @@ impl Entity for SyncUnincorporatedOrg {
     }
 }
 
-impl UnincorporatedOrg {
-    pub fn new(
-        org_type: UnincorporatedOrgType,
-        registered_address: String,
-        establishment_date: DateTime<Utc>,
-    ) -> Self {
-        let now = Utc::now();
-        let authority_scope = AuthorityScope {
-            status: AuthorityStatus::Full,
-            permitted_authorities: HashSet::new(),
-            restrictions: None,
-        };
 
-        Self {
-            base: BaseEntity {
-                id: Uuid::new_v4(),
-                entity_type: EntityType::UnincorporatedOrg,
-                capacity_status: CapacityStatus::UnincorporatedOrg(authority_scope),
-                created_at: now,
-                updated_at: now,
-            },
-            org_type,
-            executive_partner: None,
-            proprietor: None,
-            members: Vec::new(),
-            registered_address,
-            establishment_date,
-        }
-    }
-
-    /// 添加合伙人
-    pub fn add_partner(&mut self, partner: Partner) -> FanResult<()> {
-        match self.org_type {
-            UnincorporatedOrgType::Partnership(_) => {
-                self.members.push(partner);
-                self.base.updated_at = Utc::now();
-                Ok(())
-            }
-            _ => Err(FanError::ValidationError(
-                "Only partnership can add partners".to_string(),
-            )),
-        }
-    }
-
-    /// 设置执行事务合伙人
-    pub fn set_executive_partner(&mut self, partner_id: Uuid) -> FanResult<()> {
-        match self.org_type {
-            UnincorporatedOrgType::Partnership(_) => {
-                if self.members.iter().any(|p| p.id == partner_id) {
-                    self.executive_partner = Some(partner_id);
-                    self.base.updated_at = Utc::now();
-                    Ok(())
-                } else {
-                    Err(FanError::ValidationError("Partner not found".to_string()))
-                }
-            }
-            _ => Err(FanError::ValidationError(
-                "Only partnership can set executive partner".to_string(),
-            )),
-        }
-    }
-
-    /// 添加职权范围
-    pub fn add_authority(&mut self, authority: String) -> FanResult<()> {
-        if let CapacityStatus::UnincorporatedOrg(scope) = &mut self.base.capacity_status {
-            scope.permitted_authorities.insert(authority);
-            self.base.updated_at = Utc::now();
-            Ok(())
-        } else {
-            Err(FanError::ValidationError(
-                "Invalid capacity status type".to_string(),
-            ))
-        }
-    }
-
-    /// 更新职权状态
-    pub fn update_authority_status(&mut self, new_status: AuthorityStatus) -> FanResult<()> {
-        if let CapacityStatus::UnincorporatedOrg(scope) = &mut self.base.capacity_status {
-            scope.status = new_status;
-            self.base.updated_at = Utc::now();
-            Ok(())
-        } else {
-            Err(FanError::ValidationError(
-                "Invalid capacity status type".to_string(),
-            ))
-        }
-    }
-
-    /// 检查是否可以进行特定活动
-    pub fn can_perform_activity(&self, activity: &str) -> bool {
-        if let CapacityStatus::UnincorporatedOrg(scope) = &self.base.capacity_status {
-            match scope.status {
-                AuthorityStatus::Full => {
-                    scope.permitted_authorities.contains(activity)
-                        && !scope
-                            .restrictions
-                            .as_ref()
-                            .map_or(false, |r| r.contains(&activity.to_string()))
-                }
-                AuthorityStatus::Limited => {
-                    scope.permitted_authorities.contains(activity)
-                        && !scope
-                            .restrictions
-                            .as_ref()
-                            .map_or(false, |r| r.contains(&activity.to_string()))
-                }
-                AuthorityStatus::Suspended => false,
-            }
-        } else {
-            false
-        }
-    }
-}
-
-impl Entity for UnincorporatedOrg {
-    fn id(&self) -> Uuid {
-        self.base.id
-    }
-    fn entity_type(&self) -> EntityType {
-        self.base.entity_type.clone()
-    }
-    fn capacity_status(&self) -> CapacityStatus {
-        self.base.capacity_status.clone()
-    }
-    fn created_at(&self) -> DateTime<Utc> {
-        self.base.created_at
-    }
-    fn updated_at(&self) -> DateTime<Utc> {
-        self.base.updated_at
-    }
-
-    fn has_capacity(&self) -> bool {
-        match self.capacity_status() {
-            CapacityStatus::UnincorporatedOrg(_) => true,
-            _ => false,
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {
