@@ -1,13 +1,14 @@
 //! 非典型合同模块
 //! 实现非典型合同相关的功能，包括创建、验证、生效等
 
-use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use std::sync::Arc;
-use crate::{FanError, FanResult};
+use super::super::base::{BaseContract, Contract, ContractStatus};
 use crate::contract::IntentDeclaration;
 use crate::entity::Entity;
-use super::super::base::{Contract, BaseContract, ContractStatus};
+use crate::FanResult;
+
+use chrono::{DateTime, Utc};
+use std::sync::Arc;
+use uuid::Uuid;
 
 /// 非典型合同
 /// 用于处理法律未规定具体类型的合同关系

@@ -1,12 +1,13 @@
 //! 意思表示的核心定义
 //! 包括意思表示的类型、结构和基本行为
 
-use chrono::{DateTime, Utc};
-use uuid::Uuid;
 use super::content::IntentContent;
 use crate::core::entity::Entity;
-use std::sync::Arc;
 use crate::{FanError, FanResult, ValidationErrorType};
+
+use chrono::{DateTime, Utc};
+use std::sync::Arc;
+use uuid::Uuid;
 
 /// # 意思表示的类型
 /// - Offer：要约
@@ -38,10 +39,10 @@ pub enum DeclarationType {
 /// - Withdrawn：撤销
 #[derive(Debug, Clone, PartialEq)]
 pub enum DeclarationStatus {
-    Created,    // 意思表示创建但尚未生效
-    Effective,  // 意思表示已经生效
-    Revoked,    // 意思表示被撤回
-    Withdrawn,  // 意思表示被撤销
+    Created,   // 意思表示创建但尚未生效
+    Effective, // 意思表示已经生效
+    Revoked,   // 意思表示被撤回
+    Withdrawn, // 意思表示被撤销
 }
 
 /// 意思表示的核心结构
@@ -81,7 +82,6 @@ pub struct IntentDeclaration {
     status: DeclarationStatus,
 }
 
-
 impl IntentDeclaration {
     /// # 创建新的意思表示
     ///
@@ -108,7 +108,7 @@ impl IntentDeclaration {
                 ValidationErrorType::EntityCapacityLacking,
                 "new_intent_declaration",
                 "IntentDeclaration",
-            ))
+            ));
         }
 
         // 验证相对人的行为能力
@@ -119,13 +119,13 @@ impl IntentDeclaration {
                     ValidationErrorType::EntityCapacityLacking,
                     "new_intent_declaration",
                     "IntentDeclaration",
-                ))
+                ));
             }
         }
 
         let mut instance = Self {
             id: Uuid::new_v4(),
-            match_code: String::new(),  // 临时空值
+            match_code: String::new(), // 临时空值
             declaration_type,
             declarant,
             recipient,
@@ -173,7 +173,7 @@ impl IntentDeclaration {
     // }
 
     fn calculate_match_code(&self) -> String {
-        use sha2::{Sha256, Digest};
+        use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
 
         // 先收集ID到Vec中
@@ -185,10 +185,11 @@ impl IntentDeclaration {
         party_ids.sort();
 
         // 使用固定的分隔符连接
-        let party_str = party_ids.iter()
+        let party_str = party_ids
+            .iter()
             .map(|id| id.to_string())
             .collect::<Vec<_>>()
-            .join("|");  // 使用不太可能出现在其他地方的分隔符
+            .join("|"); // 使用不太可能出现在其他地方的分隔符
 
         hasher.update(party_str.as_bytes());
         hasher.update(self.content.essential_hash().as_bytes());
@@ -216,11 +217,11 @@ impl IntentDeclaration {
 
     /// 检查两个意思表示是否实质性一致
     pub fn matches(&self, other: &IntentDeclaration) -> bool {
-        self.match_code == other.match_code || (
-            self.declaration_type == other.declaration_type
+        self.match_code == other.match_code
+            || (self.declaration_type == other.declaration_type
                 && self.declarant.id() == other.declarant.id()
-                && self.recipient.as_ref().map(|r| r.id()) == other.recipient.as_ref().map(|r| r.id())
-        )
+                && self.recipient.as_ref().map(|r| r.id())
+                    == other.recipient.as_ref().map(|r| r.id()))
     }
 
     /// 判断意思表示是否仍然有效
@@ -258,7 +259,7 @@ impl IntentDeclaration {
                 ValidationErrorType::EntityCapacityLacking,
                 "validate_capacity",
                 "IntentDeclaration",
-            ))
+            ));
         }
 
         // 如果有相对人，也需要检查相对人的行为能力
@@ -269,7 +270,7 @@ impl IntentDeclaration {
                     ValidationErrorType::EntityCapacityLacking,
                     "validate_capacity",
                     "IntentDeclaration",
-                ))
+                ));
             }
         }
 
@@ -284,7 +285,7 @@ impl IntentDeclaration {
                 ValidationErrorType::IntentStatusVoid,
                 "revoke",
                 "IntentDeclaration",
-            ))
+            ));
         }
         self.status = DeclarationStatus::Revoked;
         Ok(())
@@ -298,7 +299,7 @@ impl IntentDeclaration {
                 ValidationErrorType::IntentStatusVoid,
                 "withdraw",
                 "IntentDeclaration",
-            ))
+            ));
         }
         self.status = DeclarationStatus::Withdrawn;
         Ok(())
@@ -312,7 +313,7 @@ impl IntentDeclaration {
                 ValidationErrorType::IntentStatusVoid,
                 "make_effective",
                 "IntentDeclaration",
-            ))
+            ));
         }
         self.status = DeclarationStatus::Effective;
         Ok(())
@@ -324,11 +325,9 @@ impl IntentDeclaration {
         self.status = DeclarationStatus::Effective;
         Ok(())
     }
-
 }
 
 impl IntentDeclaration {
-
     /// 获取意思表示的类型
     pub fn declaration_type(&self) -> DeclarationType {
         self.declaration_type.clone()
@@ -373,24 +372,35 @@ impl IntentDeclaration {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{Duration, Utc};
-    use chrono::TimeZone;
-    use crate::core::entity::{
-        Entity, NaturalPerson, MentalStatus, LegalPerson, LegalPersonType, CompanyType
+    use crate::contract::intent::content::{
+        Quantity, QuantityUnit, SubjectMatter, SubjectMatterType,
     };
-    use std::sync::Arc;
+    use crate::core::entity::{
+        CompanyType, Entity, LegalPerson, LegalPersonType, MentalStatus, NaturalPerson,
+    };
+    use chrono::TimeZone;
+    use chrono::{Duration, Utc};
     use rust_decimal::Decimal;
-    use crate::contract::intent::content::{Quantity, QuantityUnit, SubjectMatter, SubjectMatterType};
+    use std::sync::Arc;
 
     fn test_content() -> IntentContent {
         IntentContent::new(
-            SubjectMatter::new(Uuid::new_v4(), SubjectMatterType::GenericGoods, "测试商品".to_string(), Some("商品描述".to_string())),
+            SubjectMatter::new(
+                Uuid::new_v4(),
+                SubjectMatterType::GenericGoods,
+                "测试商品".to_string(),
+                Some("商品描述".to_string()),
+            ),
             Some(Quantity {
                 amount: Decimal::try_from(1.0).unwrap(),
                 unit: QuantityUnit::Piece,
             }),
             None,
-            Some(crate::contract::intent::content::Price::new(Decimal::try_from(100.0).unwrap(), "CNY".to_string(), "现金".to_string())),
+            Some(crate::contract::intent::content::Price::new(
+                Decimal::try_from(100.0).unwrap(),
+                "CNY".to_string(),
+                "现金".to_string(),
+            )),
             None,
             None,
         )
@@ -419,7 +429,8 @@ mod tests {
             Some(person_b.clone()),
             offer_content.clone(),
             None,
-        ).unwrap();
+        )
+        .unwrap();
 
         declaration_a.mark_as_delivered().unwrap();
 
@@ -430,7 +441,8 @@ mod tests {
             Some(person_a.clone()),
             offer_content.clone(),
             None,
-        ).unwrap();
+        )
+        .unwrap();
 
         declaration_b.mark_as_delivered().unwrap();
 
@@ -479,35 +491,34 @@ mod tests {
         assert!(result.is_err());
     }
 
-        #[test]
-        fn test_intent_declaration_with_entities() {
-            let birthday = Utc.with_ymd_and_hms(1990, 1, 1, 0, 0, 0).unwrap();
-            // 创建一个自然人作为表意人
-            let declarant = Arc::new(NaturalPerson::new(birthday, MentalStatus::Normal));
+    #[test]
+    fn test_intent_declaration_with_entities() {
+        let birthday = Utc.with_ymd_and_hms(1990, 1, 1, 0, 0, 0).unwrap();
+        // 创建一个自然人作为表意人
+        let declarant = Arc::new(NaturalPerson::new(birthday, MentalStatus::Normal));
 
-            // 创建一个公司法定代表人
-            let legal_representative = NaturalPerson::new(birthday, MentalStatus::Normal);
+        // 创建一个公司法定代表人
+        let legal_representative = NaturalPerson::new(birthday, MentalStatus::Normal);
 
-            // 创建一个法人作为相对人
-            let recipient = Arc::new(
-                LegalPerson::new(
-                    LegalPersonType::Company(CompanyType::Limited),
-                    1000000.0,
-                    legal_representative.id(),
-                    "北京".to_string(),
-                    Utc.with_ymd_and_hms(2023, 1, 1, 0, 0, 0).unwrap())
-            );
+        // 创建一个法人作为相对人
+        let recipient = Arc::new(LegalPerson::new(
+            LegalPersonType::Company(CompanyType::Limited),
+            1000000.0,
+            legal_representative.id(),
+            "北京".to_string(),
+            Utc.with_ymd_and_hms(2023, 1, 1, 0, 0, 0).unwrap(),
+        ));
 
-            // 创建意思表示
-            let declaration = IntentDeclaration::new(
-                DeclarationType::Offer,
-                declarant,
-                Some(recipient),
-                IntentContent::default(),
-                None,
-            );
+        // 创建意思表示
+        let declaration = IntentDeclaration::new(
+            DeclarationType::Offer,
+            declarant,
+            Some(recipient),
+            IntentContent::default(),
+            None,
+        );
 
-            // 验证行为能力
-            assert!(declaration.unwrap().validate_capacity().is_ok());
-        }
+        // 验证行为能力
+        assert!(declaration.unwrap().validate_capacity().is_ok());
+    }
 }

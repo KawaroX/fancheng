@@ -1,9 +1,9 @@
-use crate::{FanError, ValidationErrorType};
-use crate::FanResult;
-
 use crate::core::entity::base::{
     AuthorityScope, AuthorityStatus, BaseEntity, CapacityStatus, Entity, EntityType,
 };
+use crate::FanResult;
+use crate::{FanError, ValidationErrorType};
+
 use chrono::{DateTime, Utc};
 use parking_lot::RwLock;
 use std::collections::HashSet;
@@ -105,7 +105,7 @@ impl UnincorporatedOrg {
                 "Only partnership can add partners",
                 ValidationErrorType::EntityCapacityLacking,
                 "add_partner",
-                "UnincorporatedOrg"
+                "UnincorporatedOrg",
             )),
         }
     }
@@ -123,7 +123,7 @@ impl UnincorporatedOrg {
                         "Partner not found",
                         ValidationErrorType::EntityError,
                         "set_executive_partner",
-                        "UnincorporatedOrg"
+                        "UnincorporatedOrg",
                     ))
                 }
             }
@@ -131,7 +131,7 @@ impl UnincorporatedOrg {
                 "Only partnership can set executive partner",
                 ValidationErrorType::EntityCapacityLacking,
                 "set_executive_partner",
-                "UnincorporatedOrg"
+                "UnincorporatedOrg",
             )),
         }
     }
@@ -147,7 +147,7 @@ impl UnincorporatedOrg {
                 "Invalid capacity status type",
                 ValidationErrorType::EntityCapacityLacking,
                 "update_authority_status",
-                "UnincorporatedOrg"
+                "UnincorporatedOrg",
             ))
         }
     }
@@ -163,7 +163,7 @@ impl UnincorporatedOrg {
                 "Invalid capacity status type",
                 ValidationErrorType::EntityCapacityLacking,
                 "update_authority_status",
-                "UnincorporatedOrg"
+                "UnincorporatedOrg",
             ))
         }
     }
@@ -175,16 +175,16 @@ impl UnincorporatedOrg {
                 AuthorityStatus::Full => {
                     scope.permitted_authorities.contains(activity)
                         && !scope
-                        .restrictions
-                        .as_ref()
-                        .map_or(false, |r| r.contains(&activity.to_string()))
+                            .restrictions
+                            .as_ref()
+                            .map_or(false, |r| r.contains(&activity.to_string()))
                 }
                 AuthorityStatus::Limited => {
                     scope.permitted_authorities.contains(activity)
                         && !scope
-                        .restrictions
-                        .as_ref()
-                        .map_or(false, |r| r.contains(&activity.to_string()))
+                            .restrictions
+                            .as_ref()
+                            .map_or(false, |r| r.contains(&activity.to_string()))
                 }
                 AuthorityStatus::Suspended => false,
             }
@@ -270,8 +270,8 @@ impl SyncUnincorporatedOrg {
                 "Only partnership can add partners",
                 ValidationErrorType::EntityStatusIllegal,
                 "add_partner",
-                "SyncUnincorporatedOrg"
-            ))
+                "SyncUnincorporatedOrg",
+            )),
         }
     }
 
@@ -289,7 +289,7 @@ impl SyncUnincorporatedOrg {
                         "Partner not found",
                         ValidationErrorType::EntityError,
                         "set_executive_partner",
-                        "SyncUnincorporatedOrg"
+                        "SyncUnincorporatedOrg",
                     ))
                 }
             }
@@ -297,7 +297,7 @@ impl SyncUnincorporatedOrg {
                 "Only partnership can set executive partner",
                 ValidationErrorType::EntityCapacityLacking,
                 "set_executive_partner",
-                "SyncUnincorporatedOrg"
+                "SyncUnincorporatedOrg",
             )),
         }
     }
@@ -313,7 +313,7 @@ impl SyncUnincorporatedOrg {
                 "Invalid capacity status type",
                 ValidationErrorType::EntityStatusIllegal,
                 "add_authority",
-                "SyncUnincorporatedOrg"
+                "SyncUnincorporatedOrg",
             ))
         }
     }
@@ -329,7 +329,7 @@ impl SyncUnincorporatedOrg {
                 "Invalid capacity status type",
                 ValidationErrorType::EntityStatusIllegal,
                 "update_authority_status",
-                "SyncUnincorporatedOrg"
+                "SyncUnincorporatedOrg",
             ))
         }
     }
@@ -399,8 +399,6 @@ impl Entity for SyncUnincorporatedOrg {
         }
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {

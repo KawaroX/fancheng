@@ -1,7 +1,7 @@
 //! 典型合同模块
 
-use crate::{FanError, FanResult};
 use crate::contract::Contract;
+use crate::FanResult;
 
 /// 典型合同特征
 pub trait TypicalContract: Contract {

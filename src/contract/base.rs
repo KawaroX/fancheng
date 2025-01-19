@@ -1,13 +1,13 @@
 //! 合同的基础定义
 //! 包括合同的基本特征和通用结构
 
-use chrono::{DateTime, Utc};
-use uuid::Uuid;
-use std::sync::Arc;
-
-use crate::{FanError, FanResult, ValidationErrorType};
+use super::intent::declaration::{DeclarationType, IntentDeclaration};
 use crate::core::entity::Entity;
-use super::intent::declaration::{IntentDeclaration, DeclarationType};
+use crate::{FanError, FanResult, ValidationErrorType};
+
+use chrono::{DateTime, Utc};
+use std::sync::Arc;
+use uuid::Uuid;
 
 /// 合同条款
 #[derive(Debug, Clone)]
@@ -166,27 +166,38 @@ impl BaseContract {
     /// 验证意思表示的一致性
     fn validate_declarations(&self) -> FanResult<()> {
         // 要约
-        let offer = self.intent_declarations.iter()
+        let offer = self
+            .intent_declarations
+            .iter()
             .find(|d| matches!(d.declaration_type(), DeclarationType::Offer))
-            .ok_or_else(|| FanError::validation(
-                "缺少要约",
-                ValidationErrorType::ContractElementMissing,
-                "validate_declarations",
-                "BaseContract",
-            ))?;
+            .ok_or_else(|| {
+                FanError::validation(
+                    "缺少要约",
+                    ValidationErrorType::ContractElementMissing,
+                    "validate_declarations",
+                    "BaseContract",
+                )
+            })?;
 
         // 承诺
-        let acceptance = self.intent_declarations.iter()
+        let acceptance = self
+            .intent_declarations
+            .iter()
             .find(|d| matches!(d.declaration_type(), DeclarationType::Acceptance))
-            .ok_or_else(|| FanError::validation(
-                "缺少承诺",
-                ValidationErrorType::ContractElementMissing,
-                "validate_declarations",
-                "BaseContract",
-            ))?;
+            .ok_or_else(|| {
+                FanError::validation(
+                    "缺少承诺",
+                    ValidationErrorType::ContractElementMissing,
+                    "validate_declarations",
+                    "BaseContract",
+                )
+            })?;
 
         // 检查要约和承诺的实质性内容是否一致
-        if !offer.content().matches_essential_terms(&acceptance.content()) {
+        if !offer
+            .content()
+            .matches_essential_terms(&acceptance.content())
+        {
             return Err(FanError::validation(
                 "要约和承诺的实质性内容不一致",
                 ValidationErrorType::IntentMatchFailure,

@@ -4,26 +4,26 @@ use chrono::{DateTime, Utc};
 #[derive(Debug)]
 pub enum ValidationErrorType {
     // Entity相关错误
-    EntityCapacityLacking,     // 能力不足
-    EntityStatusIllegal,       // 实体状态不合法
-    EntityRelationMalformed,   // 实体关系不符合要求
-    EntityError,               // 其他实体错误
+    EntityCapacityLacking,   // 能力不足
+    EntityStatusIllegal,     // 实体状态不合法
+    EntityRelationMalformed, // 实体关系不符合要求
+    EntityError,             // 其他实体错误
 
     // Intent相关错误
-    IntentContentMalformed,    // 意思表示内容不合格
-    IntentStatusVoid,          // 意思表示状态无效
-    IntentMatchFailure,        // 意思表示匹配失败
+    IntentContentMalformed, // 意思表示内容不合格
+    IntentStatusVoid,       // 意思表示状态无效
+    IntentMatchFailure,     // 意思表示匹配失败
 
     // Contract相关错误
-    ContractElementMissing,    // 合同要素缺失
-    ContractContentIllegal,    // 合同内容不合法
-    ContractPartyUnqualified,  // 合同当事人不适格
-    ContractStatusIllegal,     // 合同状态不合法
+    ContractElementMissing,   // 合同要素缺失
+    ContractContentIllegal,   // 合同内容不合法
+    ContractPartyUnqualified, // 合同当事人不适格
+    ContractStatusIllegal,    // 合同状态不合法
 
     // Operation相关错误
-    OperationUnauthorized,     // 未授权的操作
-    OperationTimingWrong,      // 操作时机不当
-    OperationSequenceWrong,    // 操作顺序错误
+    OperationUnauthorized,  // 未授权的操作
+    OperationTimingWrong,   // 操作时机不当
+    OperationSequenceWrong, // 操作顺序错误
 }
 
 /// 框架统一错误类型
@@ -41,7 +41,7 @@ pub enum FanError {
     SystemError {
         message: String,
         error_type: &'static str,
-    }
+    },
 }
 
 /// 错误上下文
@@ -80,7 +80,6 @@ impl ErrorContext {
             timestamp: Utc::now(),
         }
     }
-
 
     pub fn add_entity_id(&mut self, id: impl Into<String>) -> &mut Self {
         self.entity_ids.push(id.into());

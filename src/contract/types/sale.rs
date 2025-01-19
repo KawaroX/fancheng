@@ -1,13 +1,14 @@
 //! 买卖合同的具体实现
 
-use chrono::{DateTime, Utc};
-use uuid::Uuid;
-use std::sync::Arc;
-
-use crate::{FanError, FanResult, ValidationErrorType};
-use crate::core::entity::Entity;
-use super::super::base::{Contract, BaseContract, ContractStatus};
+use super::super::base::{BaseContract, Contract, ContractStatus};
 use super::super::typical::TypicalContract;
+use crate::core::entity::Entity;
+use crate::{FanError, FanResult, ValidationErrorType};
+
+use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
+use std::sync::Arc;
+use uuid::Uuid;
 
 /// 标的物
 #[derive(Debug, Clone)]
@@ -28,7 +29,7 @@ pub struct SubjectMatter {
 #[derive(Debug, Clone)]
 pub struct Price {
     /// 金额
-    amount: f64,
+    amount: Decimal,
     /// 币种
     currency: String,
     /// 支付方式
@@ -146,7 +147,7 @@ impl TypicalContract for SaleContract {
         }
 
         // 验证价款
-        if self.price.amount <= 0.0 {
+        if self.price.amount.is_sign_negative() {
             return Err(FanError::validation(
                 "价款必须大于0",
                 ValidationErrorType::ContractContentIllegal,

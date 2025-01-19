@@ -1,9 +1,9 @@
 //! 意思表示的具体内容
 //! 包括合同的标的物、数量、质量、价款等实质性内容
 
-use std::cmp::PartialEq;
-use rust_decimal::Decimal;
 use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
+use std::cmp::PartialEq;
 use std::collections::HashMap;
 use std::fmt::Display;
 use uuid::Uuid;
@@ -104,7 +104,9 @@ impl Display for SubjectMatter {
 
 impl PartialEq for SubjectMatter {
     fn eq(&self, other: &Self) -> bool {
-        if self.id == other.id || (self.name == other.name && self.subject_type == other.subject_type) {
+        if self.id == other.id
+            || (self.name == other.name && self.subject_type == other.subject_type)
+        {
             true
         } else {
             false
@@ -308,7 +310,7 @@ impl IntentContent {
         }
 
         // 组合并计算哈希
-        use sha2::{Sha256, Digest};
+        use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(essential.join("_"));
         let result = hasher.finalize();
@@ -400,14 +402,7 @@ mod tests {
             payment_deadline: None,
         };
 
-        let content = IntentContent::new(
-            subject_matter,
-            None,
-            None,
-            Some(price),
-            None,
-            None,
-        );
+        let content = IntentContent::new(subject_matter, None, None, Some(price), None, None);
 
         // 买卖合同有标的物和价款就是实质性内容完整
         assert!(content.is_essential());

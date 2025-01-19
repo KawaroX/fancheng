@@ -1,7 +1,7 @@
-use crate::{FanError, ValidationErrorType};
-use crate::FanResult;
-
 use crate::core::entity::base::{BaseEntity, CapacityStatus, Entity, EntityType, NaturalCapacity};
+use crate::FanResult;
+use crate::{FanError, ValidationErrorType};
+
 use chrono::prelude::*;
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashSet;
@@ -54,7 +54,6 @@ pub struct NaturalPerson {
     guardian: Option<Guardianship>,
     is_guardian: bool,
 }
-
 
 impl NaturalPerson {
     /// 创建一个新的自然人实体
@@ -144,7 +143,7 @@ impl NaturalPerson {
                 ValidationErrorType::EntityStatusIllegal,
                 "set_guardian",
                 "NaturalPerson",
-            ))
+            ));
         }
 
         self.guardian = Some(Guardianship {

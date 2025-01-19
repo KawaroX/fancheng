@@ -1,8 +1,9 @@
 pub mod contract;
 pub mod core;
 pub use core::*;
-pub mod validate;
 pub mod error;
+
+pub mod validate;
 pub use error::*;
 
 // 库的版本信息

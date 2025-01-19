@@ -1,9 +1,9 @@
-use crate::{FanError, ValidationErrorType};
-use crate::FanResult;
-
 use crate::core::entity::base::{
     BaseEntity, BusinessScope, BusinessStatus, CapacityStatus, Entity, EntityType,
 };
+use crate::FanResult;
+use crate::{FanError, ValidationErrorType};
+
 use chrono::{DateTime, Utc};
 use parking_lot::RwLock;
 use std::collections::HashSet;
